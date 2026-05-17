@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidAppointment(data) {
+      return data.keys().hasAll(['name', 'phone', 'date', 'slot', 'address', 'type', 'status', 'paymentStatus', 'billAmount', 'createdAt'])
+        && data.keys().size() == 10
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.phone is string && data.phone.size() == 10
+        && data.date is string && data.date.size() <= 20
+        && data.slot is string && data.slot.size() <= 20
+        && data.address is string && data.address.size() <= 500
+        && data.type is string && data.type.size() <= 100
+        && data.status in ['pending', 'completed', 'cancelled']
+        && data.paymentStatus in ['paid', 'unpaid']
+        && data.billAmount is number
+        && data.createdAt == request.time;
+    }
+
+    // --- Collections ---
+    match /appointments/{appointmentId} {
+      // Public can create appointments
+      allow create: if isValidId(appointmentId) && isValidAppointment(incoming());
+      
+      // Clinical Staff Access
+      // Note: Ideally restricted to request.auth.uid == staff_id
+      // For now, allowing all read while development/local login is active
+      allow read, update, delete: if true; 
+    }
+  }
+}
