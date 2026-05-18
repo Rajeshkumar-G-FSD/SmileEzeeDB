@@ -39,7 +39,10 @@ import {
   MessageCircle,
   Instagram,
   Facebook,
-  UserCog
+  UserCog,
+  Search,
+  Filter,
+  RotateCcw
 } from 'lucide-react';
 
 // --- Firestore Error Handling ---
@@ -1151,14 +1154,38 @@ const DoctorLogin = ({ setPage, setIsLoggedIn }: { setPage: (p: Page) => void, s
 };
 
 const DoctorDashboard = ({ setPage, setIsLoggedIn, appointments }: { setPage: (p: Page) => void, setIsLoggedIn: (l: boolean) => void, appointments: AppointmentData[] }) => {
-  const totalInvoiced = appointments.reduce((sum, app) => sum + app.billAmount, 0);
-  const totalPaid = appointments.filter(a => a.paymentStatus === 'paid').reduce((sum, a) => sum + a.billAmount, 0);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredAppointments = appointments.filter(app => {
+    const appDate = new Date(app.date);
+    const from = fromDate ? new Date(fromDate) : null;
+    const to = toDate ? new Date(toDate) : null;
+
+    const matchesDate = (!from || appDate >= from) && (!to || appDate <= to);
+    const matchesSearch = searchTerm === '' || 
+      (app.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (app.phone || '').includes(searchTerm) ||
+      (app.issue?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+
+    return matchesDate && matchesSearch;
+  });
+
+  const totalInvoiced = filteredAppointments.reduce((sum, app) => sum + app.billAmount, 0);
+  const totalPaid = filteredAppointments.filter(a => a.paymentStatus === 'paid').reduce((sum, a) => sum + a.billAmount, 0);
   const totalUnpaid = totalInvoiced - totalPaid;
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     localStorage.removeItem('doc_auth');
     setPage('home');
+  };
+
+  const clearFilters = () => {
+    setFromDate('');
+    setToDate('');
+    setSearchTerm('');
   };
 
   const connectWhatsApp = (phone: string, name: string) => {
@@ -1182,11 +1209,64 @@ const DoctorDashboard = ({ setPage, setIsLoggedIn, appointments }: { setPage: (p
         </div>
       </div>
 
+      {/* Modern Filter Section */}
+      <div className="glass-card p-6 rounded-3xl shadow-xl border-none space-y-6">
+        <div className="flex flex-col md:flex-row items-end gap-6">
+          <div className="flex-1 space-y-2 w-full">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-primary/40 ml-1">Search Patient</label>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/30" size={18} />
+              <input 
+                type="text" 
+                placeholder="Search by name, phone or issue..."
+                className="w-full pl-12 pr-4 py-3 bg-surface rounded-2xl border border-outline-variant/10 focus:border-secondary focus:outline-none focus:ring-4 focus:ring-secondary/5 transition-all text-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-4 w-full">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary/40 ml-1">From Date</label>
+              <input 
+                type="date" 
+                className="w-full px-4 py-3 bg-surface rounded-2xl border border-outline-variant/10 focus:border-secondary focus:outline-none transition-all text-sm"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-primary/40 ml-1">To Date</label>
+              <input 
+                type="date" 
+                className="w-full px-4 py-3 bg-surface rounded-2xl border border-outline-variant/10 focus:border-secondary focus:outline-none transition-all text-sm"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+             {(fromDate || toDate || searchTerm) && (
+               <button 
+                onClick={clearFilters}
+                className="p-3 bg-surface rounded-2xl border border-outline-variant/20 text-primary/50 hover:text-secondary hover:border-secondary transition-all"
+                title="Clear Filters"
+               >
+                 <RotateCcw size={20} />
+               </button>
+             )}
+             <div className="p-3 bg-secondary text-white rounded-2xl shadow-lg shadow-secondary/20">
+               <Filter size={20} />
+             </div>
+          </div>
+        </div>
+      </div>
+
       {/* Analytics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
-          { label: 'Total Appointments', value: appointments.length, icon: <Calendar /> },
-          { label: 'Pending Visits', value: appointments.filter(a => a.status === 'pending').length, icon: <Clock /> },
+          { label: 'Total Appointments', value: filteredAppointments.length, icon: <Calendar /> },
+          { label: 'Pending Visits', value: filteredAppointments.filter(a => a.status === 'pending').length, icon: <Clock /> },
           { label: 'Total Revenue', value: `₹${totalInvoiced.toLocaleString()}`, icon: <ShieldCheck /> },
           { label: 'Unpaid Balance', value: `₹${totalUnpaid.toLocaleString()}`, icon: <Mail className="text-red-400" /> }
         ].map((stat, i) => (
@@ -1228,7 +1308,7 @@ const DoctorDashboard = ({ setPage, setIsLoggedIn, appointments }: { setPage: (p
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/5">
-              {appointments.map((app) => (
+              {filteredAppointments.map((app) => (
                 <tr key={app.id} className="hover:bg-surface transition-colors">
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-4">
@@ -1279,10 +1359,10 @@ const DoctorDashboard = ({ setPage, setIsLoggedIn, appointments }: { setPage: (p
             </tbody>
           </table>
         </div>
-        {appointments.length === 0 && (
+        {filteredAppointments.length === 0 && (
           <div className="p-20 text-center text-primary/30">
             <Calendar className="mx-auto mb-4 opacity-20" size={48} />
-            <p>No appointments found in the system</p>
+            <p>No appointments found with the current filters</p>
           </div>
         )}
       </div>
