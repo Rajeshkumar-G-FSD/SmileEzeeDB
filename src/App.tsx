@@ -1777,14 +1777,6 @@ export default function App() {
           </div>
         </div>
 
-        {!isDashboard && (
-          <div className="bg-secondary text-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 text-center text-xs sm:text-sm font-semibold tracking-wide">
-              India’s No.1 Diamond Invisalign Provider (2020-2025)*
-            </div>
-          </div>
-        )}
-
         {/* Mobile Navigation Dropdown */}
         <AnimatePresence>
           {isMobileMenuOpen && (
