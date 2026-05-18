@@ -21,7 +21,6 @@ import {
 import { db } from './lib/firebase';
 import gsap from 'gsap';
 import { motion, AnimatePresence } from 'motion/react';
-import { FloatingWhatsApp } from '@digicroz/react-floating-whatsapp';
 import { 
   Home as HomeIcon, 
   Info, 
@@ -82,6 +81,13 @@ interface AppointmentData {
 }
 
 const TODAY = new Date().toISOString().split('T')[0];
+
+const TIME_SLOTS = [
+  '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+  '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM',
+  '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM',
+  '07:00 PM', '07:30 PM'
+];
 
 const APPOINTMENT_TYPES = [
   'Exam & Cleaning',
@@ -533,11 +539,7 @@ const ServicesPage = ({ setIsBookingOpen }: { setIsBookingOpen: (o: boolean) => 
     </div>
 
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-      {[
-        "Root Canal Treatment", "Dentures & Implants", "Dental Implants",
-        "Dental Veneers", "Dental Crowns and Bridges", "Special Pedodontic Care",
-        "Orthodontics", "Invisalign", "Braces"
-      ].map((service, i) => (
+      {DENTAL_SERVICES.map((service, i) => (
         <div key={i} className="glass-card p-8 rounded-xl group hover:-translate-y-2">
           <div className="w-12 h-12 bg-secondary/10 rounded-full flex items-center justify-center mb-6 group-hover:bg-secondary group-hover:text-white transition-colors">
             <Stethoscope size={20} />
@@ -546,8 +548,8 @@ const ServicesPage = ({ setIsBookingOpen }: { setIsBookingOpen: (o: boolean) => 
           <p className="text-primary/70 mb-6 text-sm">
             Advanced specialized treatments using durable, natural-looking materials and precision technology.
           </p>
-          <button className="text-secondary font-bold text-sm flex items-center gap-2">
-            Learn More <ArrowRight size={14} />
+          <button className="text-secondary font-bold text-sm flex items-center gap-2" onClick={() => setIsBookingOpen(true)}>
+            Book Now <ArrowRight size={14} />
           </button>
         </div>
       ))}
@@ -855,13 +857,7 @@ const BookingModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose
   const [formData, setFormData] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const ALL_SLOTS = [
-    '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-    '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM',
-    '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM',
-    '07:00 PM', '07:30 PM'
-  ];
-  const availableSlots = ALL_SLOTS.filter(s => isSlotAvailable(s, formData.date));
+  const availableSlots = TIME_SLOTS.filter(s => isSlotAvailable(s, formData.date));
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -996,7 +992,9 @@ const BookingModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose
 
                   {/* Appointment Type */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-widest text-primary/50">Appointment <span className="text-red-400">*</span></label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-primary/50">
+                      Appointment Type <span className="text-red-400">*</span>
+                    </label>
                     <select
                       className={fc('appointmentType')}
                       value={formData.appointmentType}
@@ -1010,7 +1008,9 @@ const BookingModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose
 
                   {/* Dental Service */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-widest text-primary/50">Dental Service <span className="text-red-400">*</span></label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-primary/50">
+                      Dental Service <span className="text-red-400">*</span>
+                    </label>
                     <select
                       className={fc('dentalService')}
                       value={formData.dentalService}
@@ -1233,7 +1233,7 @@ const DoctorDashboard = ({ setPage, setIsLoggedIn, appointments }: { setPage: (p
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-primary/5 flex items-center justify-center text-primary font-bold">
-                        {app.name.charAt(0)}
+                        {app.name?.charAt(0) || 'P'}
                       </div>
                       <div>
                         <div className="font-bold text-primary">{app.name}</div>
@@ -1289,6 +1289,357 @@ const DoctorDashboard = ({ setPage, setIsLoggedIn, appointments }: { setPage: (p
     </div>
   );
 };
+
+const WhatsAppChatWidget = ({ onConfirm }: { onConfirm: (data: any) => Promise<void> }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [step, setStep] = useState(0); // 0: Service list, 1: Name, 2: Phone, 3: Appt Type, 4: Date, 5: Slot, 6: Address, 7: Comments, 8: Summary/Send
+  const [chatData, setChatData] = useState({
+    service: "",
+    name: "",
+    phone: "",
+    apptType: "New Consultation",
+    date: "",
+    slot: "",
+    address: "",
+    comments: ""
+  });
+  
+  const phoneNumber = "7010956291";
+
+  const handleServiceClick = (service: string) => {
+    setChatData(prev => ({ ...prev, service }));
+    setStep(1);
+  };
+
+  const nextStep = () => setStep(prev => prev + 1);
+  const prevStep = () => setStep(prev => Math.max(0, prev - 1));
+
+  const handleSend = async () => {
+    setIsSending(true);
+    try {
+      const appData = {
+        name: chatData.name,
+        email: "", 
+        phone: chatData.phone,
+        type: chatData.apptType,
+        issue: `${chatData.service}${chatData.comments ? ` - ${chatData.comments}` : ''}`,
+        date: chatData.date,
+        slot: chatData.slot,
+        address: chatData.address,
+      };
+
+      // Also sync to Google Sheets for parity
+      await syncToSheet({
+        ...appData,
+        appointmentType: chatData.apptType,
+        dentalService: chatData.service,
+        source: 'WhatsApp Chat'
+      });
+
+      // Save to Firebase
+      await onConfirm(appData);
+
+      const text = `*New Appointment Inquiry*
+--------------------------
+*Name:* ${chatData.name}
+*Phone:* ${chatData.phone}
+*Service:* ${chatData.service}
+*Type:* ${chatData.apptType}
+*Date:* ${chatData.date}
+*Slot:* ${chatData.slot}
+*Address:* ${chatData.address}
+*Issue:* ${chatData.comments || 'N/A'}
+--------------------------
+_Sent from Website WhatsApp Chat_`;
+
+      const message = encodeURIComponent(text);
+      window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
+      setIsOpen(false);
+      resetChat();
+    } catch (error) {
+      console.error("Error saving inquiry:", error);
+      // Still allow opening WhatsApp even if DB save fails
+      const text = `*New Appointment Inquiry*
+--------------------------
+*Name:* ${chatData.name}
+*Phone:* ${chatData.phone}
+*Service:* ${chatData.service}
+*Type:* ${chatData.apptType}
+*Date:* ${chatData.date}
+*Slot:* ${chatData.slot}
+*Address:* ${chatData.address}
+*Issue:* ${chatData.comments || 'N/A'}
+--------------------------
+_Sent from Website WhatsApp Chat_`;
+      const message = encodeURIComponent(text);
+      window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const resetChat = () => {
+    setStep(0);
+    setChatData({
+      service: "",
+      name: "",
+      phone: "",
+      apptType: "New Consultation",
+      date: "",
+      slot: "",
+      address: "",
+      comments: ""
+    });
+  };
+
+  const renderStep = () => {
+    switch(step) {
+      case 0:
+        return (
+          <div className="grid grid-cols-1 gap-1.5 mt-2">
+            <p className="text-[10px] text-primary/50 uppercase font-bold tracking-tight mb-1 px-1">Select Treatment</p>
+            {DENTAL_SERVICES.map(service => (
+              <button
+                key={service}
+                onClick={() => handleServiceClick(service)}
+                className="w-full text-left p-3 rounded-xl bg-white/90 hover:bg-white text-[11px] font-bold text-[#075e54] border border-[#075e54]/5 hover:border-[#075e54]/20 hover:shadow-md transition-all flex items-center justify-between group"
+              >
+                {service}
+                <ArrowRight size={12} className="opacity-30 group-hover:opacity-100 transition-opacity" />
+              </button>
+            ))}
+          </div>
+        );
+      case 1:
+        return (
+          <InputStep 
+            label="FULL NAME *" 
+            placeholder="John Doe" 
+            value={chatData.name}
+            onChange={v => setChatData(prev => ({...prev, name: v}))}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        );
+      case 2:
+        return (
+          <InputStep 
+            label="PHONE / WHATSAPP *" 
+            placeholder="10-digit number" 
+            value={chatData.phone}
+            onChange={v => setChatData(prev => ({...prev, phone: v}))}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        );
+      case 3:
+        return (
+          <SelectStep 
+            label="APPOINTMENT *" 
+            options={APPOINTMENT_TYPES}
+            value={chatData.apptType}
+            onChange={v => setChatData(prev => ({...prev, apptType: v}))}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        );
+      case 4:
+        return (
+          <DateStep 
+            label="PREFERRED DATE *" 
+            value={chatData.date}
+            onChange={v => setChatData(prev => ({...prev, date: v}))}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        );
+      case 5:
+        return (
+          <SelectStep 
+            label="SELECT TIME SLOT *" 
+            options={TIME_SLOTS}
+            value={chatData.slot}
+            onChange={v => setChatData(prev => ({...prev, slot: v}))}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        );
+      case 6:
+        return (
+          <InputStep 
+            label="ADDRESS *" 
+            placeholder="Your complete address" 
+            value={chatData.address}
+            onChange={v => setChatData(prev => ({...prev, address: v}))}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        );
+      case 7:
+        return (
+          <TextAreaStep 
+            label="COMMENTS / ISSUE DESCRIPTION" 
+            placeholder="Briefly describe your concern (optional)..." 
+            value={chatData.comments}
+            onChange={v => setChatData(prev => ({...prev, comments: v}))}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        );
+      case 8:
+        return (
+          <div className="space-y-4">
+            <div className="bg-white p-4 rounded-xl shadow-sm text-xs space-y-2 text-primary/70">
+              <p className="font-bold text-[#075e54] border-b pb-1 mb-2">Booking Summary</p>
+              <p><b>Name:</b> {chatData.name}</p>
+              <p><b>Phone:</b> {chatData.phone}</p>
+              <p><b>Service:</b> {chatData.service}</p>
+              <p><b>Date:</b> {chatData.date} at {chatData.slot}</p>
+            </div>
+            <button 
+              disabled={isSending}
+              onClick={handleSend}
+              className="w-full py-3 bg-[#25d366] text-white rounded-xl text-sm font-bold shadow-lg hover:bg-[#128c7e] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isSending ? "Saving..." : "Confirm & Send"} <MessageCircle size={18} />
+            </button>
+            <button onClick={prevStep} className="w-full text-xs text-primary/40 font-bold hover:text-primary transition-colors">Edit Details</button>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+            className="mb-4 w-[340px] sm:w-[380px] bg-white rounded-2xl shadow-2xl overflow-hidden border border-outline-variant/10"
+          >
+            {/* Header */}
+            <div className="bg-[#075e54] p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+                <img src="https://i.postimg.cc/c434DgDB/smile-tranparaent.png" alt="Logo" className="w-8 h-8 object-contain" />
+              </div>
+              <div className="text-white">
+                <h3 className="font-bold text-sm">Smile Ezee Dentistry</h3>
+                <p className="text-[10px] opacity-80">Online • Available 24*7</p>
+              </div>
+              <button onClick={() => { setIsOpen(false); resetChat(); }} className="ml-auto text-white/60 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Chat Body */}
+            <div className="h-[480px] overflow-y-auto p-4 bg-[#f0f2f5] space-y-4 custom-scrollbar relative">
+              <div className="bg-white p-3 rounded-xl rounded-tl-none shadow-sm max-w-[90%] text-[13px] text-primary/80">
+                <p>Hello! 👋 How can we help you today?</p>
+              </div>
+              
+              <AnimatePresence mode="wait">
+                <motion.div 
+                  key={step} 
+                  initial={{ opacity: 0, x: 10 }} 
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  className="pb-4"
+                >
+                  {renderStep()}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            
+            <div className="p-2 bg-white/80 text-[9px] text-center text-primary/30 font-medium">
+              Real-time booking via WhatsApp
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <button
+        onClick={() => { setIsOpen(!isOpen); if(!isOpen) resetChat(); }}
+        className="w-14 h-14 rounded-full bg-[#25d366] text-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all relative z-50 group"
+      >
+        <MessageCircle size={28} className="group-hover:rotate-12 transition-transform" />
+        {!isOpen && (
+           <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+        )}
+      </button>
+    </div>
+  );
+};
+
+// --- Helper Components for Steps ---
+const StepWrapper = ({ label, onBack, onNext, children, isNextDisabled }: any) => (
+  <div className="bg-white p-4 rounded-xl rounded-tl-none shadow-sm space-y-3">
+    <label className="text-[10px] font-bold uppercase tracking-widest text-[#075e54]/50">{label}</label>
+    {children}
+    <div className="flex gap-2 pt-1">
+      <button onClick={onBack} className="flex-1 py-2.5 rounded-lg text-[11px] font-bold border border-outline-variant/20 text-primary/40 hover:bg-surface-container transition-colors">Back</button>
+      <button 
+        disabled={isNextDisabled}
+        onClick={onNext} 
+        className="flex-[2] py-2.5 bg-[#075e54] text-white rounded-lg text-[11px] font-bold shadow-md hover:bg-[#128c7e] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+      >
+        Next <ArrowRight size={14} />
+      </button>
+    </div>
+  </div>
+);
+
+const InputStep = ({ label, placeholder, value, onChange, onNext, onBack }: any) => (
+  <StepWrapper label={label} onBack={onBack} onNext={onNext} isNextDisabled={!value.trim()}>
+    <input 
+      type="text" 
+      autoFocus
+      placeholder={placeholder}
+      className="w-full p-3 rounded-xl border border-outline-variant/20 bg-surface-container/30 text-sm focus:outline-none focus:border-[#075e54] transition-all"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+    />
+  </StepWrapper>
+);
+
+const TextAreaStep = ({ label, placeholder, value, onChange, onNext, onBack }: any) => (
+  <StepWrapper label={label} onBack={onBack} onNext={onNext}>
+    <textarea 
+      rows={3}
+      autoFocus
+      placeholder={placeholder}
+      className="w-full p-3 rounded-xl border border-outline-variant/20 bg-surface-container/30 text-sm focus:outline-none focus:border-[#075e54] transition-all resize-none"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+    />
+  </StepWrapper>
+);
+
+const SelectStep = ({ label, options, value, onChange, onNext, onBack }: any) => (
+  <StepWrapper label={label} onBack={onBack} onNext={onNext} isNextDisabled={!value}>
+    <select
+      className="w-full p-3 rounded-xl border border-outline-variant/20 bg-surface-container/30 text-sm focus:outline-none focus:border-[#075e54]"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+    >
+      <option value="">Select option</option>
+      {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  </StepWrapper>
+);
+
+const DateStep = ({ label, value, onChange, onNext, onBack }: any) => (
+  <StepWrapper label={label} onBack={onBack} onNext={onNext} isNextDisabled={!value}>
+    <input 
+      type="date"
+      className="w-full p-3 rounded-xl border border-outline-variant/20 bg-surface-container/30 text-sm focus:outline-none focus:border-[#075e54]"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+    />
+  </StepWrapper>
+);
 
 export default function App() {
   const [page, setPage] = useState<Page>('home');
@@ -1495,20 +1846,7 @@ export default function App() {
 
       <Footer setPage={setPage} />
 
-      <FloatingWhatsApp 
-        phoneNumber="7010956291"
-        accountName="Smile Ezee Dentistry"
-        avatar="https://i.postimg.cc/c434DgDB/smile-tranparaent.png"
-        statusMessage="Available 24*7"
-        chatMessage="Hello! 👋 How can we help you today?"
-        darkMode={false}
-        allowClickAway={true}
-        allowEsc={true}
-        notification={true}
-        notificationSound={true}
-        notificationDelay={30}
-        chatboxHeight={450}
-      />
+      <WhatsAppChatWidget onConfirm={addAppointment} />
 
       <BookingModal 
         isOpen={isBookingOpen} 
@@ -1516,10 +1854,10 @@ export default function App() {
         onConfirm={addAppointment}
       />
 
-      {/* FAB */}
+      {/* FAB - Moved slightly to avoid WhatsApp button overlap if needed */}
       <button 
         onClick={() => setIsBookingOpen(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-secondary text-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+        className="fixed bottom-24 right-8 w-14 h-14 rounded-full bg-secondary text-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
       >
         <Calendar size={24} />
       </button>
