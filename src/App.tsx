@@ -128,35 +128,45 @@ const DENTAL_SERVICES = [
 ];
 
 const syncToSheet = async (data: any) => {
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyhX8MicF6OCrU9W70cY_fyCWHzO51jyHvFJyQN3W54Imn5LU6ke-_v0TlsCSkasvxn/exec";
+  const SCRIPT_URL = import.meta.env.VITE_GOOGLE_SCRIPT_URL;
+  if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR_NEW_SCRIPT_URL_HERE")) {
+    console.warn("Google Script URL not configured. Data will not sync to Sheets.");
+    return;
+  }
   
   try {
+    // Map internal names to Google Sheet expected names
+    const mappedData = {
+      fullName: data.name,
+      phone: data.phone,
+      appointmentType: data.appointmentType || data.type,
+      dentalService: data.dentalService,
+      preferredDate: data.date,
+      timeSlot: data.slot,
+      address: data.address,
+      comments: data.issue,
+      source: data.source || 'Website'
+    };
+
     const params = new URLSearchParams();
-    for (const key in data) {
-      if (Object.prototype.hasOwnProperty.call(data, key)) {
-        params.append(key, String(data[key] ?? ""));
+    for (const key in mappedData) {
+      if (Object.prototype.hasOwnProperty.call(mappedData, key)) {
+        params.append(key, String((mappedData as any)[key] ?? ""));
       }
     }
 
-    // We send payload in both URL and Body to ensure e.parameter is populated 
-    // even if the POST is converted to a GET during redirect.
-    const url = `${SCRIPT_URL}?${params.toString()}`;
+    // Use URL with parameters for maximum compatibility with GS redirects
+    const urlWithParams = `${SCRIPT_URL}?${params.toString()}`;
 
-    console.log("Syncing to sheet...", Object.fromEntries(params.entries()));
-
-    await fetch(url, {
+    await fetch(urlWithParams, {
       method: "POST",
       mode: "no-cors",
-      cache: "no-cache",
-      body: params,
-      keepalive: true
+      cache: "no-cache"
     });
     
-    console.log("Data dispatched. Opening messenger...");
-    // Give browser a moment to finish network dispatch before any potential page lifecycle changes
-    await new Promise(resolve => setTimeout(resolve, 1500));
-  } catch (err) {
-    console.error("Sheet sync failed:", err);
+    console.log("Booking synced to Google Sheet successfully.");
+  } catch (error) {
+    console.error("Error syncing to sheet:", error);
   }
 };
 
